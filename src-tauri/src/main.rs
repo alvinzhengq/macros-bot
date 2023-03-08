@@ -1,97 +1,147 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use enigo::*;
 use std::{sync::Arc, time::Duration};
-use tokio::{
-    sync::broadcast,
-    sync::mpsc::{self, error::TryRecvError},
-    sync::Mutex,
-    time,
-};
+use tokio::{sync::broadcast, sync::Mutex, time};
 
 struct AsyncSender {
-    inner: Mutex<mpsc::Sender<Event>>,
+    inner: Mutex<broadcast::Sender<i32>>,
+    vec: Arc<Mutex<Vec<Event>>>,
 }
 
+#[derive(Debug, Clone, Copy)]
 struct Event {
-    key: String,
+    key: char,
     interval: i32,
+}
+
+impl PartialEq for Event {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
 }
 
 #[tauri::command]
 async fn create_event(
-    key: &str,
+    key: char,
     interval: i32,
     state: tauri::State<'_, AsyncSender>,
-) -> Result<(), String> {
+) -> Result<(), ()> {
+    let event_list = &mut state.vec.lock().await;
+    let e = Event { key, interval };
+    dbg!(&e);
+
+    if event_list.contains(&e) {
+        for i in 0..event_list.len() {
+            if event_list[i] == e {
+                event_list[i] = e;
+                break;
+            }
+        }
+    } else {
+        event_list.push(e);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_event(
+    key: char,
+    interval: i32,
+    state: tauri::State<'_, AsyncSender>,
+) -> Result<(), ()> {
+    let event_list = &mut state.vec.lock().await;
+    let e = Event { key, interval };
+
+    let index = event_list.iter().position(|evt| *evt == e).unwrap();
+    event_list.remove(index);
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_events(state: tauri::State<'_, AsyncSender>) -> Result<(), ()> {
+    let event_list = &mut state.vec.lock().await;
+
+    event_list.clear();
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn toggle_bot(toggle: i32, state: tauri::State<'_, AsyncSender>) -> Result<(), ()> {
     let main_thread_tx = state.inner.lock().await;
 
     main_thread_tx
-        .send(Event {
-            key: String::from(key),
-            interval,
+        .send(toggle)
+        .map_err(|e| {
+            dbg!(e);
         })
-        .await
-        .map_err(|e| e.to_string())
+        .unwrap();
+
+    Ok(())
 }
 
-fn main() {
-    let (tx, mut rx) = mpsc::channel(64);
-    let (tx2, _) = broadcast::channel(64);
+#[tokio::main]
+async fn main() {
+    tauri::async_runtime::set(tokio::runtime::Handle::current());
+
+    let (tx, mut rx) = broadcast::channel(64);
+    let event_list: Arc<Mutex<Vec<Event>>> = Arc::new(Mutex::new(Vec::new()));
+    let event_list_rx: Arc<Mutex<Vec<Event>>> = event_list.clone();
 
     tauri::Builder::default()
         .manage(AsyncSender {
-            inner: Mutex::new(tx),
+            inner: Mutex::new(tx.clone()),
+            vec: event_list,
         })
         .setup(|_| {
-            let event_list: Arc<Mutex<Vec<Event>>> = Arc::new(Mutex::new(vec![]));
-            let event_list_main = event_list.clone();
-            let mut toggled = false;
-
             tauri::async_runtime::spawn(async move {
                 loop {
                     match rx.try_recv() {
-                        Ok(e) => event_list_main.lock().await.push(e),
-                        Err(TryRecvError::Empty) => {}
-                        Err(TryRecvError::Disconnected) => break,
-                    };
+                        Ok(1) => {
+                            dbg!(&event_list_rx.lock().await);
+                            for e in event_list_rx.lock().await.iter() {
+                                let mut rx_clone = tx.subscribe();
 
-                    // hot key logic here
-                    if !toggled {
-                        let mut rx2_clone = tx2.subscribe();
-                        let event_list_child = event_list.clone();
+                                let key = e.key;
+                                let intv = e.interval;
 
-                        tauri::async_runtime::spawn(async move {
-                            let mut interval = time::interval(Duration::from_millis(100));
-                            let mut count = 1;
+                                tauri::async_runtime::spawn(async move {
+                                    let mut enigo = Enigo::new();
+                                    let mut interval =
+                                        time::interval(Duration::from_millis(intv as u64));
 
-                            loop {
-                                interval.tick().await;
-                                match rx2_clone.try_recv() {
-                                    Err(broadcast::error::TryRecvError::Empty) => {}
-                                    _ => break,
-                                }
+                                    while let Ok(_) = rx_clone.try_recv() {}
 
-                                for e in event_list_child.lock().await.iter() {
-                                    if count % e.interval == 0 {
-                                        // key event logic here
+                                    loop {
+                                        interval.tick().await;
+
+                                        match rx_clone.try_recv() {
+                                            Err(broadcast::error::TryRecvError::Empty) => {}
+                                            _ => break,
+                                        }
+
+                                        enigo.key_click(Key::Layout(key));
                                     }
-                                }
-
-                                count += 1;
+                                });
                             }
-                        });
-
-                        toggled = true;
-                    } else {
-                        tx2.send(0).unwrap();
+                        }
+                        _ => continue,
                     }
                 }
             });
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![create_event])
+        .invoke_handler(tauri::generate_handler![
+            create_event,
+            toggle_bot,
+            delete_event,
+            clear_events
+        ])
         .run(tauri::generate_context!())
         .expect("Tauri Application Error");
 }

@@ -5,7 +5,6 @@
     readTextFile,
     BaseDirectory,
     createDir,
-    exists,
   } from "@tauri-apps/api/fs";
 
   let disabled = false;
@@ -35,11 +34,6 @@
 
       key_list_active = [...key_list_active, false];
 
-      invoke("toggle_bot", { toggle: 1 });
-      setTimeout(() => {
-        invoke("toggle_bot", { toggle: 0 });
-      }, 100);
-
       disabled = false;
       recording = false;
     },
@@ -54,7 +48,7 @@
   function deleteKey(i) {
     invoke("delete_event", {
       key: key_list[i].key,
-      interval: key_list[i].interval,
+      interval: parseInt(key_list[i].interval),
     });
 
     key_list = key_list.filter((m, index) => index !== i);
@@ -69,7 +63,6 @@
 
   function toggleKey(i) {
     key_list_active[i] = !key_list_active[i];
-    console.log(key_list_active);
   }
 
   async function loadConfig() {
@@ -78,6 +71,8 @@
     });
 
     invoke("clear_events");
+    key_list = []
+    key_list_active = []
 
     let temp = JSON.parse(contents);
     for (let i = 0; i < temp.length; i++) {
@@ -89,11 +84,6 @@
         interval: parseInt(temp[i].interval),
       });
     }
-
-    invoke("toggle_bot", { toggle: 1 });
-    setTimeout(() => {
-      invoke("toggle_bot", { toggle: 0 });
-    }, 100);
   }
 
   async function exportConfig() {
@@ -118,6 +108,7 @@
         class="w-20 h-20 border-2 rounded-lg border-gray-400 bg-gray-400 text-center text-white relative"
       >
         <h1 class="text-3xl font-bold">{key}</h1>
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
         <h1
           class="text-xl font-bold cursor-pointer"
           on:click={() => {
@@ -137,11 +128,11 @@
 
       <div
         id="modal"
-        class="hidden fixed top-0 left-0 right-0 z-50 w-full p-2 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-1rem)] md:h-full"
+        class="hidden fixed top-0 left-0 right-0 z-50 w-full p-2 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-2rem)] md:h-full"
         class:selected={key_list_active[i]}
       >
         <div
-          class="w-full h-full max-w-2xl md:h-auto absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+          class="w-full h-full max-w-2xl md:h-auto absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
         >
           <!-- Modal content -->
           <div
@@ -163,11 +154,6 @@
                 });
 
                 toggleKey(i);
-
-                invoke("toggle_bot", { toggle: 1 });
-                setTimeout(() => {
-                  invoke("toggle_bot", { toggle: 0 });
-                }, 100);
               }}
               class="bg-blue-400 font-medium rounded-lg text-sm px-8 py-2.5 text-center inline-flex items-center mt-4 text-white"
               >Submit</button

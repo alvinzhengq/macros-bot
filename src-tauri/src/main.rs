@@ -1,13 +1,23 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use enigo::*;
-use std::{sync::Arc, time::Duration};
+use rdev::{simulate, EventType, Key, SimulateError};
+use std::{sync::Arc, thread, time::Duration};
 use tokio::{sync::broadcast, sync::Mutex, time};
-
 struct AsyncSender {
     inner: Mutex<broadcast::Sender<i32>>,
     vec: Arc<Mutex<Vec<Event>>>,
+}
+
+fn send(event_type: &EventType) {
+    let delay = time::Duration::from_millis(20);
+    match simulate(event_type) {
+        Ok(()) => (),
+        Err(SimulateError) => {
+            println!("We could not send {:?}", event_type);
+        }
+    }
+    thread::sleep(delay);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -30,7 +40,6 @@ async fn create_event(
 ) -> Result<(), ()> {
     let event_list = &mut state.vec.lock().await;
     let e = Event { key, interval };
-    dbg!(&e);
 
     if event_list.contains(&e) {
         for i in 0..event_list.len() {
@@ -54,8 +63,9 @@ async fn delete_event(
 ) -> Result<(), ()> {
     let event_list = &mut state.vec.lock().await;
     let e = Event { key, interval };
+    dbg!(&e);
 
-    let index = event_list.iter().position(|evt| *evt == e).unwrap();
+    let index = event_list.iter().position(|evt| evt.key == e.key).unwrap();
     event_list.remove(index);
 
     Ok(())
@@ -100,36 +110,71 @@ async fn main() {
         .setup(|_| {
             tauri::async_runtime::spawn(async move {
                 loop {
-                    match rx.try_recv() {
-                        Ok(1) => {
-                            dbg!(&event_list_rx.lock().await);
-                            for e in event_list_rx.lock().await.iter() {
-                                let mut rx_clone = tx.subscribe();
+                    if rx.recv().await.unwrap() != 1 {
+                        continue;
+                    }
 
-                                let key = e.key;
-                                let intv = e.interval;
+                    for e in event_list_rx.lock().await.iter() {
+                        let mut rx_clone = tx.subscribe();
+                        let key = e.key;
+                        let intv = e.interval;
 
-                                tauri::async_runtime::spawn(async move {
-                                    let mut enigo = Enigo::new();
-                                    let mut interval =
-                                        time::interval(Duration::from_millis(intv as u64));
+                        tokio::spawn(async move {
+                            let mut interval = time::interval(Duration::from_millis(intv as u64));
 
-                                    while let Ok(_) = rx_clone.try_recv() {}
+                            while let Ok(_) = rx_clone.try_recv() {}
 
-                                    loop {
-                                        interval.tick().await;
+                            loop {
+                                interval.tick().await;
 
-                                        match rx_clone.try_recv() {
-                                            Err(broadcast::error::TryRecvError::Empty) => {}
-                                            _ => break,
-                                        }
+                                match rx_clone.try_recv() {
+                                    Err(broadcast::error::TryRecvError::Empty) => {}
+                                    _ => break,
+                                }
 
-                                        enigo.key_click(Key::Layout(key));
-                                    }
-                                });
+                                let key_enum = match key {
+                                    'a' => Key::KeyA,
+                                    'b' => Key::KeyB,
+                                    'c' => Key::KeyC,
+                                    'd' => Key::KeyD,
+                                    'e' => Key::KeyE,
+                                    'f' => Key::KeyF,
+                                    'g' => Key::KeyG,
+                                    'h' => Key::KeyH,
+                                    'i' => Key::KeyI,
+                                    'j' => Key::KeyJ,
+                                    'k' => Key::KeyK,
+                                    'l' => Key::KeyL,
+                                    'm' => Key::KeyM,
+                                    'n' => Key::KeyN,
+                                    'o' => Key::KeyO,
+                                    'p' => Key::KeyP,
+                                    'q' => Key::KeyQ,
+                                    'r' => Key::KeyR,
+                                    's' => Key::KeyS,
+                                    't' => Key::KeyT,
+                                    'u' => Key::KeyU,
+                                    'v' => Key::KeyV,
+                                    'w' => Key::KeyW,
+                                    'x' => Key::KeyX,
+                                    'y' => Key::KeyY,
+                                    'z' => Key::KeyZ,
+                                    '0' => Key::Num0,
+                                    '1' => Key::Num1,
+                                    '2' => Key::Num2,
+                                    '3' => Key::Num3,
+                                    '4' => Key::Num4,
+                                    '5' => Key::Num5,
+                                    '6' => Key::Num6,
+                                    '7' => Key::Num7,
+                                    '8' => Key::Num8,
+                                    '9' => Key::Num9,
+                                    _ => Key::KeyA
+                                };
+
+                                send(&EventType::KeyPress(key_enum));
                             }
-                        }
-                        _ => continue,
+                        });
                     }
                 }
             });

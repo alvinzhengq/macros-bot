@@ -63,7 +63,6 @@ async fn delete_event(
 ) -> Result<(), ()> {
     let event_list = &mut state.vec.lock().await;
     let e = Event { key, interval };
-    dbg!(&e);
 
     let index = event_list.iter().position(|evt| evt.key == e.key).unwrap();
     event_list.remove(index);

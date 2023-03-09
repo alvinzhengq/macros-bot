@@ -4,6 +4,7 @@
 use rdev::{simulate, EventType, Key, SimulateError};
 use std::{sync::Arc, thread, time::Duration};
 use tokio::{sync::broadcast, sync::Mutex, time};
+use winapi::um::winuser::GetKeyState;
 struct AsyncSender {
     inner: Mutex<broadcast::Sender<i32>>,
     vec: Arc<Mutex<Vec<Event>>>,
@@ -40,6 +41,8 @@ async fn create_event(
 ) -> Result<(), ()> {
     let event_list = &mut state.vec.lock().await;
     let e = Event { key, interval };
+
+    dbg!(&e);
 
     if event_list.contains(&e) {
         for i in 0..event_list.len() {
@@ -107,11 +110,33 @@ async fn main() {
             vec: event_list,
         })
         .setup(|_| {
+            let toggle_tx = tx.clone();
+
+            tauri::async_runtime::spawn_blocking(move || {
+                loop {
+                    unsafe {
+                        // Z
+                        if GetKeyState(90).is_negative() {
+                            toggle_tx.send(1).unwrap();
+                            thread::sleep(Duration::from_millis(200));
+                        }
+
+                        // X
+                        if GetKeyState(88).is_negative() {
+                            toggle_tx.send(0).unwrap();
+                            thread::sleep(Duration::from_millis(200));
+                        }
+                    }
+                }
+            });
+
             tauri::async_runtime::spawn(async move {
                 loop {
                     if rx.recv().await.unwrap() != 1 {
                         continue;
                     }
+
+                    println!("test");
 
                     for e in event_list_rx.lock().await.iter() {
                         let mut rx_clone = tx.subscribe();
@@ -168,7 +193,8 @@ async fn main() {
                                     '7' => Key::Num7,
                                     '8' => Key::Num8,
                                     '9' => Key::Num9,
-                                    _ => Key::KeyA
+                                    ' ' => Key::Space,
+                                    _ => Key::Space,
                                 };
 
                                 send(&EventType::KeyPress(key_enum));

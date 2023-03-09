@@ -13,12 +13,12 @@ edition = "2021"
 tauri-build = { version = "1.2", features = [] }
 
 [dependencies]
+enigo = { git = "https://github.com/alvinzhengq/enigo" }
 tokio = { version = "1", features = ["full"] }
 tauri = { version = "1.2", features = ["fs-all", "shell-open"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 winapi = "0.3.9"
-enigo = "0.0.14"
 rdev = "0.4.6"
 
 [features]

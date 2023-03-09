@@ -1,23 +1,22 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use rdev::{simulate, EventType, Key, SimulateError};
 use std::{sync::Arc, thread, time::Duration};
 use tokio::{sync::broadcast, sync::Mutex, time};
 use winapi::um::winuser::GetKeyState;
+use enigo::*;
+
 struct AsyncSender {
     inner: Mutex<broadcast::Sender<i32>>,
     vec: Arc<Mutex<Vec<Event>>>,
 }
 
-fn send(event_type: &EventType) {
+fn send(key: Key) {
     let delay = time::Duration::from_millis(20);
-    match simulate(event_type) {
-        Ok(()) => (),
-        Err(SimulateError) => {
-            println!("We could not send {:?}", event_type);
-        }
-    }
+    
+    let mut engio = Enigo::new();
+    engio.key_click(key);
+
     thread::sleep(delay);
 }
 
@@ -82,20 +81,6 @@ async fn clear_events(state: tauri::State<'_, AsyncSender>) -> Result<(), ()> {
     Ok(())
 }
 
-#[tauri::command]
-async fn toggle_bot(toggle: i32, state: tauri::State<'_, AsyncSender>) -> Result<(), ()> {
-    let main_thread_tx = state.inner.lock().await;
-
-    main_thread_tx
-        .send(toggle)
-        .map_err(|e| {
-            dbg!(e);
-        })
-        .unwrap();
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() {
     tauri::async_runtime::set(tokio::runtime::Handle::current());
@@ -113,17 +98,14 @@ async fn main() {
             let toggle_tx = tx.clone();
 
             tauri::async_runtime::spawn_blocking(move || {
+                let active = false;
                 loop {
                     unsafe {
                         // Z
                         if GetKeyState(90).is_negative() {
-                            toggle_tx.send(1).unwrap();
-                            thread::sleep(Duration::from_millis(200));
-                        }
+                            active = !active;
 
-                        // X
-                        if GetKeyState(88).is_negative() {
-                            toggle_tx.send(0).unwrap();
+                            toggle_tx.send(active as i32).unwrap();
                             thread::sleep(Duration::from_millis(200));
                         }
                     }
@@ -156,48 +138,48 @@ async fn main() {
                                     _ => break,
                                 }
 
-                                let key_enum = match key {
-                                    'a' => Key::KeyA,
-                                    'b' => Key::KeyB,
-                                    'c' => Key::KeyC,
-                                    'd' => Key::KeyD,
-                                    'e' => Key::KeyE,
-                                    'f' => Key::KeyF,
-                                    'g' => Key::KeyG,
-                                    'h' => Key::KeyH,
-                                    'i' => Key::KeyI,
-                                    'j' => Key::KeyJ,
-                                    'k' => Key::KeyK,
-                                    'l' => Key::KeyL,
-                                    'm' => Key::KeyM,
-                                    'n' => Key::KeyN,
-                                    'o' => Key::KeyO,
-                                    'p' => Key::KeyP,
-                                    'q' => Key::KeyQ,
-                                    'r' => Key::KeyR,
-                                    's' => Key::KeyS,
-                                    't' => Key::KeyT,
-                                    'u' => Key::KeyU,
-                                    'v' => Key::KeyV,
-                                    'w' => Key::KeyW,
-                                    'x' => Key::KeyX,
-                                    'y' => Key::KeyY,
-                                    'z' => Key::KeyZ,
-                                    '0' => Key::Num0,
-                                    '1' => Key::Num1,
-                                    '2' => Key::Num2,
-                                    '3' => Key::Num3,
-                                    '4' => Key::Num4,
-                                    '5' => Key::Num5,
-                                    '6' => Key::Num6,
-                                    '7' => Key::Num7,
-                                    '8' => Key::Num8,
-                                    '9' => Key::Num9,
-                                    ' ' => Key::Space,
-                                    _ => Key::Space,
-                                };
+                                // let key_enum = match key {
+                                //     'a' => Key::KeyA,
+                                //     'b' => Key::KeyB,
+                                //     'c' => Key::KeyC,
+                                //     'd' => Key::KeyD,
+                                //     'e' => Key::KeyE,
+                                //     'f' => Key::KeyF,
+                                //     'g' => Key::KeyG,
+                                //     'h' => Key::KeyH,
+                                //     'i' => Key::KeyI,
+                                //     'j' => Key::KeyJ,
+                                //     'k' => Key::KeyK,
+                                //     'l' => Key::KeyL,
+                                //     'm' => Key::KeyM,
+                                //     'n' => Key::KeyN,
+                                //     'o' => Key::KeyO,
+                                //     'p' => Key::KeyP,
+                                //     'q' => Key::KeyQ,
+                                //     'r' => Key::KeyR,
+                                //     's' => Key::KeyS,
+                                //     't' => Key::KeyT,
+                                //     'u' => Key::KeyU,
+                                //     'v' => Key::KeyV,
+                                //     'w' => Key::KeyW,
+                                //     'x' => Key::KeyX,
+                                //     'y' => Key::KeyY,
+                                //     'z' => Key::KeyZ,
+                                //     '0' => Key::Num0,
+                                //     '1' => Key::Num1,
+                                //     '2' => Key::Num2,
+                                //     '3' => Key::Num3,
+                                //     '4' => Key::Num4,
+                                //     '5' => Key::Num5,
+                                //     '6' => Key::Num6,
+                                //     '7' => Key::Num7,
+                                //     '8' => Key::Num8,
+                                //     '9' => Key::Num9,
+                                //     ' ' => Key::Space,
+                                //     _ => Key::Space,
+                                // };
 
-                                send(&EventType::KeyPress(key_enum));
+                                send(Key::Layout(key));
                             }
                         });
                     }
@@ -208,7 +190,6 @@ async fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             create_event,
-            toggle_bot,
             delete_event,
             clear_events
         ])

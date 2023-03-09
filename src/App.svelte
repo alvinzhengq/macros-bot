@@ -8,7 +8,6 @@
   } from "@tauri-apps/api/fs";
 
   let disabled = false;
-  let active = false;
   let recording = false;
 
   let key_list = [];
@@ -54,13 +53,6 @@
     key_list = key_list.filter((m, index) => index !== i);
   }
 
-  function toggleBot() {
-    active = !active;
-    disabled = active;
-
-    invoke("toggle_bot", { toggle: active ? 1 : 0 });
-  }
-
   function toggleKey(i) {
     key_list_active[i] = !key_list_active[i];
   }
@@ -101,7 +93,6 @@
   <div
     id="main"
     class="bg-black/[0.04] w-[90vw] h-[70vh] rounded-lg flex flex-row flex-wrap justify-around items-center p-12"
-    class:selected={active}
   >
     {#each key_list as { key, interval }, i}
       <div
@@ -186,26 +177,6 @@
     </button>
 
     <button
-      on:click={toggleBot}
-      disabled={!active && disabled}
-      type="button"
-      class="duration-200 disabled:bg-gray-300 disabled:border-gray-300 disabled:text-white disabled:hover: hover:text-white hover:bg-green-300 text-green-300 border-[2px] border-green-300 font-medium rounded-lg text-sm px-8 py-2.5 text-center inline-flex items-center mr-2"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="32"
-        height="32"
-        fill="currentColor"
-        class="bi bi-play-fill"
-        viewBox="0 0 16 16"
-      >
-        <path
-          d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"
-        />
-      </svg>
-    </button>
-
-    <button
       on:click={recordKey}
       {disabled}
       type="button"
@@ -251,10 +222,6 @@
 </main>
 
 <style>
-  #main.selected {
-    pointer-events: none;
-  }
-
   #modal.selected {
     display: block !important;
   }

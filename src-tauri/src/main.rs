@@ -98,7 +98,7 @@ async fn main() {
             let toggle_tx = tx.clone();
 
             tauri::async_runtime::spawn_blocking(move || {
-                let active = false;
+                let mut active = false;
                 loop {
                     unsafe {
                         // Z
